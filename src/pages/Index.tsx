@@ -1,8 +1,5 @@
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { Header } from '@/components/Header';
 import { ArticleInput } from '@/components/ArticleInput';
@@ -10,6 +7,7 @@ import { SummaryResult } from '@/components/SummaryResult';
 import { ApiKeyModal } from '@/components/ApiKeyModal';
 import { aiService } from '@/services/aiService';
 import { getRandomSampleArticle } from '@/utils/mockTexts';
+import { Button } from '@/components/ui/button';
 
 const Index = () => {
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
@@ -23,7 +21,6 @@ const Index = () => {
     // Check if API key exists
     const apiKey = aiService.getApiKey();
     if (!apiKey) {
-      // If no API key, show the modal
       setIsApiKeyModalOpen(true);
     }
   }, []);
@@ -93,7 +90,6 @@ const Index = () => {
   const loadSampleArticle = () => {
     const sample = getRandomSampleArticle();
     setOriginalText(sample.text);
-    // Auto-populate the ArticleInput component with the sample text
     handleSubmit(sample.text, 25);
   };
 
@@ -106,22 +102,25 @@ const Index = () => {
           <div className="mb-8 text-center">
             <h1 className="text-3xl font-bold mb-3 gradient-text">Article Whisperer</h1>
             <p className="text-muted-foreground mb-6">
-              Paste any article or long text to get an AI-powered summary and ask questions about the content.
+              Paste any article or enter a URL to get an AI-powered summary and ask questions about the content
             </p>
-            <Button 
-              variant="outline" 
-              onClick={loadSampleArticle}
-              className="mx-auto"
-            >
-              Try with Sample Article
-            </Button>
+            {!summary && (
+              <Button 
+                variant="outline" 
+                onClick={loadSampleArticle}
+                className="mx-auto"
+                disabled={isLoading}
+              >
+                Try with Sample Article
+              </Button>
+            )}
           </div>
           
           <div className="grid gap-8">
             {!summary ? (
               <ArticleInput 
                 onSubmit={handleSubmit} 
-                isLoading={isLoading} 
+                isLoading={isLoading}
               />
             ) : (
               <SummaryResult 
