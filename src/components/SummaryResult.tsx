@@ -1,9 +1,10 @@
-import { useState } from 'react';
+
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
-import { Copy, Share2, ShieldCheck, AlertCircle, CheckCircle, Loader2, Headphones, Youtube, Globe } from 'lucide-react';
+import { Copy, Share2, ShieldCheck, AlertCircle, CheckCircle, Loader2, Headphones, Youtube, Globe, Pause } from 'lucide-react';
 import { toast } from 'sonner';
 import { Progress } from "@/components/ui/progress";
 import { aiService } from '@/services/aiService';
@@ -35,6 +36,8 @@ export const SummaryResult = ({
   const [isTranslating, setIsTranslating] = useState(false);
   const [recommendations, setRecommendations] = useState<{title: string, url: string, type: string}[]>([]);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+
+  const speakRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -85,6 +88,7 @@ export const SummaryResult = ({
     }
   };
 
+  // Updated handleSpeak with Stop support
   const handleSpeak = (text: string) => {
     if (!window.speechSynthesis) {
       toast.error("Text-to-speech not supported.");
@@ -99,8 +103,17 @@ export const SummaryResult = ({
     utter.lang = 'en-US';
     utter.onend = () => setIsSpeaking(false);
     utter.onerror = () => setIsSpeaking(false);
+    speakRef.current = utter;
     setIsSpeaking(true);
     window.speechSynthesis.speak(utter);
+  };
+
+  // Stop button handler
+  const handleStopSpeak = () => {
+    if (isSpeaking && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+    }
   };
 
   const handleTranslateHindi = async () => {
@@ -213,6 +226,17 @@ export const SummaryResult = ({
                   <Headphones className="h-4 w-4" />
                   {isSpeaking ? "Speaking..." : "Listen"}
                 </Button>
+                {isSpeaking && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleStopSpeak}
+                    className="flex gap-1"
+                  >
+                    <Pause className="h-4 w-4" />
+                    Stop
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"

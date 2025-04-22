@@ -1,6 +1,6 @@
+
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Header } from '@/components/Header';
 import { ArticleInput } from '@/components/ArticleInput';
 import { SummaryResult } from '@/components/SummaryResult';
 import { ApiKeyModal } from '@/components/ApiKeyModal';
@@ -151,11 +151,19 @@ const Index = () => {
     handleSubmit(sample.text, 25);
   };
 
+  // Handler for "Summarize Another Article"
+  const handleClearSummary = () => {
+    setSummary(null);
+    setOriginalText("");
+    setAnswer(null);
+    setQuizActive(false);
+    setQuizScore(null);
+    setQuizSuggestion(null);
+  };
+
   return (
     <div className="min-h-[80vh] flex flex-col">
-      <Header />
-      
-      <main className="flex-1 container py-6">
+      <main className="flex-1 container py-8">
         <div className="max-w-4xl mx-auto">
           <div className="mb-8 text-center">
             <h1 className="text-3xl font-bold mb-3 gradient-text">Article Whisperer</h1>
@@ -182,13 +190,20 @@ const Index = () => {
                   isLoading={isLoading}
                 />
               ) : (
-                <SummaryResult 
-                  summary={summary}
-                  originalText={originalText}
-                  onAskQuestion={handleAskQuestion}
-                  answer={answer}
-                  isLoading={isAnswerLoading}
-                />
+                <>
+                  <SummaryResult 
+                    summary={summary}
+                    originalText={originalText}
+                    onAskQuestion={handleAskQuestion}
+                    answer={answer}
+                    isLoading={isAnswerLoading}
+                  />
+                  <div className="flex justify-end mt-4">
+                    <Button variant="secondary" onClick={handleClearSummary}>
+                      Summarize Another Article
+                    </Button>
+                  </div>
+                </>
               )}
               {/* Quiz Section */}
               {summary && quizActive && (
@@ -201,16 +216,12 @@ const Index = () => {
                 </div>
               )}
             </div>
-            {/* Add instructions and exploration hints */}
-            <div className="bg-accent/10 rounded-lg p-4 h-fit shadow-md space-y-4">
-              <h3 className="font-bold text-xl">What’s New:</h3>
-              <ul className="list-disc space-y-2 ml-6">
-                <li>🔑 Login/Register to unlock AI-powered article tracking!</li>
-                <li>📝 Summarize articles and see them in your History tab.</li>
-                <li>🌟 Take personalized quizzes and get learning suggestions.</li>
-                <li>🗂️ View your quiz scores and summaries in "History".</li>
-                <li>👤 Manage your profile and see your info in "Profile".</li>
-              </ul>
+            {/* Removed instructions/hints sidebar for a cleaner look */}
+            <div className="bg-accent/10 rounded-lg p-4 h-fit shadow-md space-y-4 flex flex-col items-center justify-center">
+              {/* Empty right pane for visual balance, consider adding graphics later */}
+              <div className="h-32 flex items-center justify-center opacity-50">
+                {/* Optionally insert a decorative SVG or mascot here */}
+              </div>
             </div>
           </div>
         </div>
