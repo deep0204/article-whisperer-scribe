@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
+import { Label } from "@/components/ui/label";
 
 // Simple AI-powered quiz generator using Gemini prompt could be plugged here.
 // For now, we simulate 5 basic questions related to summary text.
@@ -116,7 +117,7 @@ export function QuizModal({ open, onClose, summary, onSubmit }: QuizModalProps) 
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Article Quiz</DialogTitle>
           <div className="text-sm text-muted-foreground">Answer all questions to test your understanding.</div>
@@ -133,14 +134,10 @@ export function QuizModal({ open, onClose, summary, onSubmit }: QuizModalProps) 
                   required
                 >
                   {q.options.map((opt, i) => (
-                    <RadioGroupItem
-                      key={i}
-                      value={String(i)}
-                      className="mr-2"
-                      id={`q${idx}_opt${i}`}
-                    >
-                      <span className="ml-1">{opt}</span>
-                    </RadioGroupItem>
+                    <div key={i} className="flex items-center space-x-2">
+                      <RadioGroupItem value={String(i)} id={`q${idx}_opt${i}`} />
+                      <Label htmlFor={`q${idx}_opt${i}`}>{opt}</Label>
+                    </div>
                   ))}
                 </RadioGroup>
               </div>
