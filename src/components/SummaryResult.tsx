@@ -1,10 +1,9 @@
-
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
-import { Copy, Share2, ShieldCheck, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { Copy, Share2, ShieldCheck, AlertCircle, CheckCircle, Loader2, Headphones, Youtube, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import { Progress } from "@/components/ui/progress";
 import { aiService } from '@/services/aiService';
@@ -29,6 +28,13 @@ export const SummaryResult = ({
   const [authenticityExplanation, setAuthenticityExplanation] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<string>('summary');
+
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [hindiTranslation, setHindiTranslation] = useState<string | null>(null);
+  const [tHindi, setTHindi] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [recommendations, setRecommendations] = useState<{title: string, url: string, type: string}[]>([]);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -79,6 +85,62 @@ export const SummaryResult = ({
     }
   };
 
+  const handleSpeak = (text: string) => {
+    if (!window.speechSynthesis) {
+      toast.error("Text-to-speech not supported.");
+      return;
+    }
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      return;
+    }
+    const utter = new window.SpeechSynthesisUtterance(text);
+    utter.lang = 'en-US';
+    utter.onend = () => setIsSpeaking(false);
+    utter.onerror = () => setIsSpeaking(false);
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utter);
+  };
+
+  const handleTranslateHindi = async () => {
+    if (hindiTranslation) {
+      setTHindi((prev) => !prev);
+      return;
+    }
+    setIsTranslating(true);
+    setTHindi(true);
+    try {
+      const result = await aiService.geminiTranslate(summary, "hi");
+      if (result.error || !result.translation) {
+        toast.error("Could not translate to Hindi.");
+        setIsTranslating(false);
+        return;
+      }
+      setHindiTranslation(result.translation);
+    } catch {
+      toast.error("Translation error!");
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  const handleRecommendations = async () => {
+    setLoadingRecommendations(true);
+    try {
+      const prompt = `Find 3 YouTube video recommendations and 2 web resources related to the following article summary. For each, return a JSON object with title, url, and type ("youtube" or "web").\n\nSummary: ${summary}`;
+      const result = await aiService.geminiReferences(prompt);
+      if (!result || !Array.isArray(result.references)) {
+        toast.error("Failed to fetch references.");
+      } else {
+        setRecommendations(result.references);
+      }
+    } catch {
+      toast.error("Could not fetch recommendations.");
+    }
+    setLoadingRecommendations(false);
+  };
+
   const getScoreColor = (score: number | null) => {
     if (score === null) return "bg-gray-200";
     if (score >= 80) return "bg-green-500";
@@ -121,45 +183,104 @@ export const SummaryResult = ({
           </TabsList>
           
           <TabsContent value="summary" className="mt-4">
-            <div className="p-4 bg-muted/50 rounded-md mb-4">
+            <div className="p-4 bg-muted/50 rounded-md mb-4 flex flex-col gap-4">
               <p className="font-serif text-lg leading-relaxed whitespace-pre-line">{summary}</p>
-            </div>
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => handleCopy(summary)}
-                className="flex gap-1"
-              >
-                <Copy className="h-4 w-4" /> Copy
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={handleShare}
-                className="flex gap-1"
-              >
-                <Share2 className="h-4 w-4" /> Share
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={analyzeAuthenticity}
-                disabled={isAnalyzing}
-                className="flex gap-1 ml-auto"
-              >
-                {isAnalyzing ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <ShieldCheck className="h-4 w-4" /> 
-                    Check Authenticity
-                  </>
-                )}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => handleCopy(summary)}
+                  className="flex gap-1"
+                >
+                  <Copy className="h-4 w-4" /> Copy
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleShare}
+                  className="flex gap-1"
+                >
+                  <Share2 className="h-4 w-4" /> Share
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSpeak(summary)}
+                  className="flex gap-1"
+                  disabled={isSpeaking}
+                  title="Listen to the summary"
+                >
+                  <Headphones className="h-4 w-4" />
+                  {isSpeaking ? "Speaking..." : "Listen"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleTranslateHindi}
+                  className="flex gap-1"
+                  disabled={isTranslating}
+                >
+                  {isTranslating && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {!isTranslating && (
+                    <Globe className="h-4 w-4" />
+                  )}
+                  Translate to Hindi
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRecommendations}
+                  className="flex gap-1"
+                  disabled={loadingRecommendations}
+                >
+                  <Youtube className="h-4 w-4" />
+                  {loadingRecommendations ? "Loading Videos..." : "Get Video Recommendations"}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={analyzeAuthenticity}
+                  disabled={isAnalyzing}
+                  className="flex gap-1 ml-auto"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="h-4 w-4" /> 
+                      Check Authenticity
+                    </>
+                  )}
+                </Button>
+              </div>
+              {tHindi && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded p-4 mt-2">
+                  <h3 className="font-medium mb-1">Hindi Translation:</h3>
+                  {isTranslating
+                    ? <span>Translating...</span>
+                    : <p className="text-md font-sans leading-relaxed" style={{ whiteSpace: "pre-wrap" }}>{hindiTranslation}</p>
+                  }
+                </div>
+              )}
+              {Array.isArray(recommendations) && recommendations.length > 0 && (
+                <div className="mt-2 p-4 bg-muted/30 rounded">
+                  <h3 className="mb-2 font-bold flex items-center gap-2">
+                    <Youtube className="h-4 w-4" /> Related Videos & Web References:
+                  </h3>
+                  <ul className="space-y-1">
+                    {recommendations.map((rec, idx) => (
+                      <li key={idx} className="flex items-center gap-2 text-sm">
+                        {rec.type === "youtube" && <Youtube className="h-4 w-4 text-red-500" />}
+                        {rec.type === "web" && <Globe className="h-4 w-4 text-blue-400" />}
+                        <a href={rec.url} className="underline text-blue-700" target="_blank" rel="noopener noreferrer">{rec.title}</a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </TabsContent>
           
