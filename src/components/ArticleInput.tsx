@@ -12,9 +12,10 @@ import { toast } from 'sonner';
 interface ArticleInputProps {
   onSubmit: (text: string, length: number) => void;
   isLoading: boolean;
+  cardClassName?: string; // Add the optional cardClassName prop
 }
 
-export const ArticleInput = ({ onSubmit, isLoading }: ArticleInputProps) => {
+export const ArticleInput = ({ onSubmit, isLoading, cardClassName }: ArticleInputProps) => {
   const [text, setText] = useState<string>('');
   const [url, setUrl] = useState<string>('');
   const [summaryLength, setSummaryLength] = useState<number>(25);
@@ -98,7 +99,7 @@ export const ArticleInput = ({ onSubmit, isLoading }: ArticleInputProps) => {
   };
 
   return (
-    <Card className="w-full">
+    <Card className={`w-full ${cardClassName || ''}`}>
       <CardHeader>
         <CardTitle>Summarize Content</CardTitle>
         <CardDescription>
