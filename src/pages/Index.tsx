@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { ArticleInput } from '@/components/ArticleInput';
@@ -9,6 +8,7 @@ import { getRandomSampleArticle } from '@/utils/mockTexts';
 import { Button } from '@/components/ui/button';
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { QuizModal } from "@/components/QuizModal"; // Add new import
 
 const Index = () => {
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
@@ -108,14 +108,34 @@ const Index = () => {
     }
   };
 
-  const handleQuizSubmit = async (score: number, suggestion: string) => {
+  const [quizModalOpen, setQuizModalOpen] = useState(false);
+
+  // Handler for clearing the summary
+  const handleClearSummary = () => {
+    setSummary(null);
+    setOriginalText("");
+    setAnswer(null);
+    setQuizActive(false);
+    setQuizScore(null);
+    setQuizSuggestion(null);
+  };
+
+  // Handler to launch the quiz modal
+  const handleOpenQuiz = () => {
+    setQuizModalOpen(true);
+  };
+
+  // Handler to process quiz results
+  const handleQuizFinished = async (score: number, suggestion: string) => {
+    setQuizScore(score);
+    setQuizSuggestion(suggestion);
+    setQuizActive(false);
+    setQuizModalOpen(false);
+
     if (!user) {
       toast.error("Please login to submit quiz results.");
       return;
     }
-    setQuizScore(score);
-    setQuizSuggestion(suggestion);
-    setQuizActive(false);
 
     // Save quiz result (get latest article_history_id)
     const { data, error } = await supabase
@@ -151,28 +171,18 @@ const Index = () => {
     handleSubmit(sample.text, 25);
   };
 
-  // Handler for "Summarize Another Article"
-  const handleClearSummary = () => {
-    setSummary(null);
-    setOriginalText("");
-    setAnswer(null);
-    setQuizActive(false);
-    setQuizScore(null);
-    setQuizSuggestion(null);
-  };
-
   return (
     <div className="min-h-[80vh] flex flex-col">
       <main className="flex-1 container py-8">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-3xl mx-auto">
           <div className="mb-8 text-center">
-            <h1 className="text-3xl font-bold mb-3 gradient-text">Article Whisperer</h1>
+            <h1 className="text-4xl font-bold mb-3 gradient-text">Article Whisperer</h1>
             <p className="text-muted-foreground mb-6">
-              Paste any article or enter a URL to get an AI-powered summary, take a quiz, and explore your history!
+              Paste any article or enter a URL to get an AI-powered summary and optionally take a quiz.
             </p>
             {!summary && (
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={loadSampleArticle}
                 className="mx-auto"
                 disabled={isLoading}
@@ -181,13 +191,13 @@ const Index = () => {
               </Button>
             )}
           </div>
-          
-          <div className="grid md:grid-cols-2 gap-8">
-            <div>
+          <div className="flex flex-col items-center">
+            <div className="w-full">
               {!summary ? (
                 <ArticleInput 
                   onSubmit={handleSubmit} 
                   isLoading={isLoading}
+                  cardClassName="min-h-[550px] text-base" // optional: add a prop for extra styling
                 />
               ) : (
                 <>
@@ -198,85 +208,57 @@ const Index = () => {
                     answer={answer}
                     isLoading={isAnswerLoading}
                   />
-                  <div className="flex justify-end mt-4">
+                  <div className="flex flex-col md:flex-row items-center justify-between mt-4 gap-2">
                     <Button variant="secondary" onClick={handleClearSummary}>
                       Summarize Another Article
+                    </Button>
+                    <Button
+                      onClick={handleOpenQuiz}
+                      className="bg-brand-600 text-white hover:bg-brand-700 transition-colors"
+                    >
+                      Take a Quiz
                     </Button>
                   </div>
                 </>
               )}
-              {/* Quiz Section */}
-              {summary && quizActive && (
-                <QuizSection onSubmit={handleQuizSubmit} />
-              )}
+              {/* Remove obsolete QuizSection and quiz result blocks */}
               {summary && !quizActive && quizScore !== null && (
                 <div className="mt-4 p-4 bg-muted/40 rounded">
                   <p className="font-bold">Quiz Score: {quizScore}/100</p>
-                  {quizSuggestion && <p className="text-sm text-muted-foreground mt-2">Suggestion: {quizSuggestion}</p>}
+                  {quizSuggestion && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Suggestion: {quizSuggestion}
+                    </p>
+                  )}
                 </div>
               )}
-            </div>
-            {/* Removed instructions/hints sidebar for a cleaner look */}
-            <div className="bg-accent/10 rounded-lg p-4 h-fit shadow-md space-y-4 flex flex-col items-center justify-center">
-              {/* Empty right pane for visual balance, consider adding graphics later */}
-              <div className="h-32 flex items-center justify-center opacity-50">
-                {/* Optionally insert a decorative SVG or mascot here */}
-              </div>
             </div>
           </div>
         </div>
       </main>
-      
-      <footer className="py-6 border-t bg-muted/30">
+      <footer className="py-8 border-t bg-muted/30 mt-8">
         <div className="container">
           <p className="text-center text-sm text-muted-foreground">
             Article Whisperer © {new Date().getFullYear()} - AI-powered article summarization and analysis
           </p>
         </div>
       </footer>
-      
-      <ApiKeyModal 
+      <ApiKeyModal
         open={isApiKeyModalOpen}
         onClose={() => setIsApiKeyModalOpen(false)}
         onSave={handleSaveApiKey}
       />
+      {/* Quiz Modal */}
+      {summary && (
+        <QuizModal
+          open={quizModalOpen}
+          onClose={() => setQuizModalOpen(false)}
+          summary={summary}
+          onSubmit={handleQuizFinished}
+        />
+      )}
     </div>
   );
 };
-
-function QuizSection({ onSubmit }: { onSubmit: (score: number, suggestion: string) => void }) {
-  // Simple simulated quiz: (in future, use AI to build quiz from summary)
-  const [answer, setAnswer] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  function handleQuiz(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    // Fake evaluation
-    setTimeout(() => {
-      const score = answer.trim().toLowerCase() === "ai" ? 100 : 60;
-      const suggestion = score < 90 ? "Review the section about AI basics!" : "Great work!";
-      onSubmit(score, suggestion);
-      setLoading(false);
-    }, 1000);
-  }
-
-  return (
-    <form onSubmit={handleQuiz} className="mt-8 p-4 bg-muted/50 rounded space-y-4">
-      <div className="font-semibold mb-2">Quiz: What is the main topic of the article?</div>
-      <input
-        className="w-full border rounded px-3 py-2"
-        value={answer}
-        onChange={(e) => setAnswer(e.target.value)}
-        required
-        placeholder="Your answer..."
-      />
-      <Button disabled={loading} className="w-full">{loading ? "Submitting..." : "Submit Quiz"}</Button>
-      {error && <div className="text-destructive">{error}</div>}
-    </form>
-  );
-}
 
 export default Index;
