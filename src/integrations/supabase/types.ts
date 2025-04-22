@@ -9,7 +9,89 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      article_history: {
+        Row: {
+          created_at: string
+          id: string
+          original_text: string
+          summary: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          original_text: string
+          summary: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          original_text?: string
+          summary?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          full_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          full_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      quiz_results: {
+        Row: {
+          article_history_id: string
+          created_at: string
+          id: string
+          score: number
+          suggestion: string | null
+          user_id: string
+        }
+        Insert: {
+          article_history_id: string
+          created_at?: string
+          id?: string
+          score: number
+          suggestion?: string | null
+          user_id: string
+        }
+        Update: {
+          article_history_id?: string
+          created_at?: string
+          id?: string
+          score?: number
+          suggestion?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_results_article_history_id_fkey"
+            columns: ["article_history_id"]
+            isOneToOne: false
+            referencedRelation: "article_history"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
