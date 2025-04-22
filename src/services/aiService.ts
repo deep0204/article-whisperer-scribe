@@ -1,4 +1,3 @@
-
 // This service handles the AI processing using Google's Gemini API
 
 interface SummaryResponse {
@@ -14,6 +13,22 @@ interface AnswerResponse {
 interface AuthenticityResponse {
   score: number;
   explanation: string;
+  error?: string;
+}
+
+interface TranslationResponse {
+  translation: string;
+  error?: string;
+}
+
+interface Reference {
+  title: string;
+  url: string;
+  type: string;
+}
+
+interface ReferencesResponse {
+  references: Reference[];
   error?: string;
 }
 
@@ -287,6 +302,246 @@ export class AIService {
         error: 'Failed to analyze authenticity. Please check your API key and try again.',
         score: 0,
         explanation: '' 
+      };
+    }
+  }
+
+  async geminiTranslate(text: string, targetLanguage: string): Promise<TranslationResponse> {
+    const apiKey = this.getApiKey();
+    
+    if (!apiKey) {
+      return { error: 'API key not set', translation: '' };
+    }
+
+    try {
+      console.log(`Making API call to Google Gemini API for translation to ${targetLanguage}...`);
+      
+      const prompt = `
+        Translate the following text into ${targetLanguage}. Maintain the original meaning, tone, and style as much as possible.
+        
+        Text to translate:
+        ${text}
+        
+        Provide only the translated text without additional notes or explanations.
+      `;
+      
+      const response = await fetch(
+        `${this.baseUrl}/${this.model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: prompt
+                  }
+                ]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.1,
+              topK: 40,
+              topP: 0.95,
+              maxOutputTokens: 1024,
+            }
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Gemini API error:', errorData);
+        return { 
+          error: `Error from Gemini API: ${errorData.error?.message || response.statusText}`,
+          translation: '' 
+        };
+      }
+
+      const data = await response.json();
+      
+      if (!data.candidates || !data.candidates[0]?.content?.parts?.[0]?.text) {
+        console.error('Unexpected response format:', data);
+        return { 
+          error: 'Received unexpected response format from Gemini API',
+          translation: '' 
+        };
+      }
+      
+      const translation = data.candidates[0].content.parts[0].text.trim();
+      return { translation };
+    } catch (error) {
+      console.error('Error in translation:', error);
+      return { 
+        error: 'Failed to translate text. Please check your API key and try again.',
+        translation: '' 
+      };
+    }
+  }
+
+  async geminiReferences(prompt: string): Promise<ReferencesResponse> {
+    const apiKey = this.getApiKey();
+    
+    if (!apiKey) {
+      return { error: 'API key not set', references: [] };
+    }
+
+    try {
+      console.log('Making API call to Google Gemini API for references...');
+      
+      const response = await fetch(
+        `${this.baseUrl}/${this.model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: prompt
+                  }
+                ]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.3,
+              topK: 40,
+              topP: 0.95,
+              maxOutputTokens: 1024,
+            }
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Gemini API error:', errorData);
+        return { 
+          error: `Error from Gemini API: ${errorData.error?.message || response.statusText}`,
+          references: [] 
+        };
+      }
+
+      const data = await response.json();
+      
+      if (!data.candidates || !data.candidates[0]?.content?.parts?.[0]?.text) {
+        console.error('Unexpected response format:', data);
+        return { 
+          error: 'Received unexpected response format from Gemini API',
+          references: [] 
+        };
+      }
+      
+      const responseText = data.candidates[0].content.parts[0].text.trim();
+      
+      // Try to parse JSON from the response
+      try {
+        // First, try to extract JSON from the text if it's embedded
+        let jsonString = responseText;
+        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          jsonString = jsonMatch[0];
+        }
+        
+        // Parse the references
+        const references = JSON.parse(jsonString);
+        
+        if (!Array.isArray(references)) {
+          return {
+            error: 'Invalid reference format received',
+            references: []
+          };
+        }
+        
+        // Validate and transform references
+        const validReferences = references
+          .filter(ref => ref && typeof ref.title === 'string' && typeof ref.url === 'string')
+          .map(ref => ({
+            title: ref.title,
+            url: ref.url,
+            type: ref.type || (ref.url.includes('youtube.com') ? 'youtube' : 'web')
+          }));
+        
+        return { references: validReferences };
+      } catch (parseError) {
+        console.error('Error parsing references:', parseError);
+        
+        // Fallback: try to generate structured data by reparsing with Gemini
+        try {
+          const structurePrompt = `
+            Convert the following text into a valid JSON array of reference objects.
+            Each object should have 'title', 'url', and 'type' (either 'youtube' or 'web').
+            
+            Text to structure:
+            ${responseText}
+            
+            Return ONLY valid JSON with no explanation:
+          `;
+          
+          const structureResponse = await fetch(
+            `${this.baseUrl}/${this.model}:generateContent?key=${apiKey}`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    parts: [
+                      {
+                        text: structurePrompt
+                      }
+                    ]
+                  }
+                ],
+                generationConfig: {
+                  temperature: 0.1,
+                  topK: 40,
+                  topP: 0.95,
+                  maxOutputTokens: 1024,
+                }
+              })
+            }
+          );
+          
+          if (structureResponse.ok) {
+            const structureData = await structureResponse.json();
+            const jsonText = structureData.candidates[0]?.content?.parts?.[0]?.text.trim();
+            const jsonMatch = jsonText.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+              const structuredRefs = JSON.parse(jsonMatch[0]);
+              if (Array.isArray(structuredRefs)) {
+                return { 
+                  references: structuredRefs.map(ref => ({
+                    title: ref.title,
+                    url: ref.url,
+                    type: ref.type || (ref.url.includes('youtube.com') ? 'youtube' : 'web')
+                  }))
+                };
+              }
+            }
+          }
+        } catch (fallbackError) {
+          console.error('Error in fallback parsing:', fallbackError);
+        }
+        
+        return {
+          error: 'Could not parse references from the AI response',
+          references: []
+        };
+      }
+    } catch (error) {
+      console.error('Error getting references:', error);
+      return { 
+        error: 'Failed to get references. Please check your API key and try again.',
+        references: [] 
       };
     }
   }
