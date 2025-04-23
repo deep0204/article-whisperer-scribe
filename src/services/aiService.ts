@@ -1,3 +1,4 @@
+
 // This service handles the AI processing using Google's Gemini API
 
 interface SummaryResponse {
@@ -763,7 +764,14 @@ export class AIService {
       return data.candidates[0].content.parts[0].text.trim();
     } catch (error) {
       console.error('Error generating feedback:', error);
-      return score >= 80 
+      // Calculate the score inside the catch block as well
+      let correctCount = 0;
+      questions.forEach((q, i) => {
+        if (answers[i] === q.answer) correctCount++;
+      });
+      const fallbackScore = Math.round((correctCount / questions.length) * 100);
+      
+      return fallbackScore >= 80 
         ? "Great job! You have a good understanding of the article."
         : "You might want to review the article again to improve your understanding.";
     }
