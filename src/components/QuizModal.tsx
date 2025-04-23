@@ -6,7 +6,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
 import { aiService } from "@/services/aiService";
-import { Loader2 } from "lucide-react";
+import { Loader2, check, x } from "lucide-react";
 
 interface QuizQuestion {
   question: string;
@@ -40,31 +40,34 @@ export function QuizModal({ open, onClose, summary, onSubmit }: QuizModalProps) 
       setSubmitted(false);
       setScore(null);
       setSuggestion("");
+      setQuestions([]);
+      setError(null);
+      setLoading(true);
     }
   }, [open, summary]);
 
   const fetchQuestions = async () => {
     if (!summary) return;
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       const result = await aiService.generateQuizQuestions(summary);
-      
+
       if (result.error) {
         console.error("Error generating quiz:", result.error);
         setError(result.error);
         toast.error("Failed to generate quiz questions");
         return;
       }
-      
+
       if (result.questions.length === 0) {
         setError("No questions were generated. Please try again.");
         toast.error("Failed to generate quiz questions");
         return;
       }
-      
+
       setQuestions(result.questions);
       setSelected(Array(result.questions.length).fill(-1));
     } catch (error) {
@@ -84,38 +87,117 @@ export function QuizModal({ open, onClose, summary, onSubmit }: QuizModalProps) 
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    
+
     // Check if all questions are answered
     if (selected.some(val => val === -1)) {
       toast.error("Please answer all questions");
       return;
     }
-    
-    let correct = 0;
+
+    let correctCount = 0;
     questions.forEach((q, i) => {
-      if (selected[i] === q.answer) correct++;
+      if (selected[i] === q.answer) correctCount++;
     });
-    
-    const resultScore = Math.round((correct / questions.length) * 100);
+
+    const resultScore = Math.round((correctCount / questions.length) * 100);
     setScore(resultScore);
-    
+
     // Generate personalized feedback
     setGeneratingFeedback(true);
+    let feedback = "";
     try {
-      const feedback = await aiService.generateQuizFeedback(summary, questions, selected);
+      feedback = await aiService.generateQuizFeedback(summary, questions, selected);
       setSuggestion(feedback);
     } catch (error) {
       console.error("Error generating feedback:", error);
-      setSuggestion(resultScore >= 80 
-        ? "Great job! You have a good understanding of the article." 
+      setSuggestion(resultScore >= 80
+        ? "Great job! You have a good understanding of the article."
         : "You might want to review the article again to improve your understanding.");
     } finally {
       setGeneratingFeedback(false);
     }
-    
+
     setSubmitted(true);
     toast.success(`Quiz completed! You scored ${resultScore}/100`);
-    onSubmit(resultScore, suggestion);
+    onSubmit(resultScore, feedback);
+  }
+
+  // Show answer correctness
+  function renderSubmittedQuestions() {
+    return (
+      <div className="mt-1 space-y-5">
+        {questions.map((q, idx) => {
+          const isCorrect = selected[idx] === q.answer;
+          return (
+            <div
+              key={idx}
+              className={`p-3 rounded border 
+                ${isCorrect
+                  ? "border-green-400 bg-green-50"
+                  : "border-red-400 bg-red-50"
+                } transition-colors`}
+            >
+              <div className="flex items-center gap-2 font-medium mb-2">
+                <span>
+                  {idx + 1}.
+                </span>
+                <span>{q.question}</span>
+                {isCorrect ? (
+                  <check className="text-green-600 w-5 h-5" />
+                ) : (
+                  <x className="text-red-500 w-5 h-5" />
+                )}
+                {isCorrect ? (
+                  <span className="text-green-700 ml-2 text-xs font-semibold">Correct</span>
+                ) : (
+                  <span className="text-red-700 ml-2 text-xs font-semibold">Wrong</span>
+                )}
+              </div>
+              <div className="flex flex-col gap-1">
+                {q.options.map((opt, i) => {
+                  // User's selected radio value and disabled
+                  const selectedThis = selected[idx] === i;
+                  const correctThis = q.answer === i;
+                  return (
+                    <div key={i} className="flex items-center gap-2 ml-2">
+                      <div
+                        className={
+                          "w-3 h-3 rounded-full mr-2 border " +
+                          (selectedThis
+                            ? isCorrect
+                              ? "border-green-700 bg-green-600"
+                              : "border-red-700 bg-red-600"
+                            : "border-gray-300 bg-white"
+                          )
+                        }
+                      />
+                      <span className={
+                        `${selectedThis
+                          ? (isCorrect
+                              ? "font-semibold text-green-800"
+                              : "font-semibold text-red-700")
+                          : correctThis
+                            ? "font-semibold text-green-700 underline"
+                            : ""
+                        }`
+                      }>
+                        {opt}
+                        {correctThis && !selectedThis && (
+                          <span className="ml-2 text-green-700 text-xs"> (Correct Answer)</span>
+                        )}
+                      </span>
+                      {selectedThis && !isCorrect && (
+                        <span className="ml-2 text-red-500 text-xs">(Your Answer)</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
   }
 
   return (
@@ -125,28 +207,28 @@ export function QuizModal({ open, onClose, summary, onSubmit }: QuizModalProps) 
           <DialogTitle>Article Quiz</DialogTitle>
           <div className="text-sm text-muted-foreground">Answer all questions to test your understanding.</div>
         </DialogHeader>
-        
+
         {loading && (
           <div className="flex flex-col items-center justify-center py-10 space-y-4">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
             <p>Generating quiz questions based on the article...</p>
           </div>
         )}
-        
+
         {error && (
           <div className="p-4 my-4 text-center bg-destructive/10 rounded-md">
             <p className="text-destructive font-medium">Error generating quiz questions</p>
             <p className="text-sm mt-1">{error}</p>
-            <Button 
-              onClick={fetchQuestions} 
-              variant="outline" 
+            <Button
+              onClick={fetchQuestions}
+              variant="outline"
               className="mt-3"
             >
               Try Again
             </Button>
           </div>
         )}
-        
+
         {!loading && !error && !submitted && questions.length > 0 && (
           <form className="space-y-6 mt-2" onSubmit={handleSubmit}>
             {questions.map((q, idx) => (
@@ -170,17 +252,18 @@ export function QuizModal({ open, onClose, summary, onSubmit }: QuizModalProps) 
             <Button type="submit" className="w-full">Submit Quiz</Button>
           </form>
         )}
-        
+
         {submitted && (
           <div className="text-center py-8">
             <div className="text-2xl font-bold mb-2">Your Score: {score}/100</div>
+            {renderSubmittedQuestions()}
             {generatingFeedback ? (
               <div className="flex flex-col items-center justify-center mt-4 mb-4">
                 <Loader2 className="w-6 h-6 animate-spin text-primary mb-2" />
                 <p className="text-sm text-muted-foreground">Generating personalized feedback...</p>
               </div>
             ) : (
-              <div className="text-sm text-muted-foreground">{suggestion}</div>
+              <div className="text-sm text-muted-foreground mt-4">{suggestion}</div>
             )}
             <Button className="mt-4" onClick={onClose}>Close</Button>
           </div>
