@@ -5,64 +5,13 @@ import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
+import { aiService } from "@/services/aiService";
+import { Loader2 } from "lucide-react";
 
-// Simple AI-powered quiz generator using Gemini prompt could be plugged here.
-// For now, we simulate 5 basic questions related to summary text.
-function generateQuizQuestions(summary: string) {
-  // In real app, call aiService.geminiQuiz(summary) and parse results
-  // Here, use dummy templated questions for demonstration:
-  return [
-    {
-      question: "What is the main topic of the article?",
-      options: [
-        "Artificial Intelligence",
-        "Cooking Recipes",
-        "Sports Event",
-        "Weather Forecast",
-      ],
-      answer: 0,
-    },
-    {
-      question: "Which language is primarily used in the summary?",
-      options: [
-        "Hindi",
-        "English",
-        "Spanish",
-        "None of the above",
-      ],
-      answer: 1,
-    },
-    {
-      question: "What does the summary focus on?",
-      options: [
-        "Travel safety",
-        "AI advancements",
-        "Movie reviews",
-        "Gardening tips",
-      ],
-      answer: 1,
-    },
-    {
-      question: "Is AI considered safe in the summary?",
-      options: [
-        "Yes",
-        "No",
-        "Not mentioned",
-        "Discussed in detail",
-      ],
-      answer: 0,
-    },
-    {
-      question: "What is recommended for further improvement?",
-      options: [
-        "Reviewing AI basics",
-        "Cooking more",
-        "Visiting new countries",
-        "Watching movies",
-      ],
-      answer: 0,
-    },
-  ];
+interface QuizQuestion {
+  question: string;
+  options: string[];
+  answer: number;
 }
 
 interface QuizModalProps {
@@ -73,21 +22,59 @@ interface QuizModalProps {
 }
 
 export function QuizModal({ open, onClose, summary, onSubmit }: QuizModalProps) {
-  const [selected, setSelected] = useState<number[]>(Array(5).fill(-1));
+  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<number[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState<number | null>(null);
   const [suggestion, setSuggestion] = useState<string>("");
-
-  const questions = generateQuizQuestions(summary);
+  const [generatingFeedback, setGeneratingFeedback] = useState(false);
 
   useEffect(() => {
-    if (!open) {
-      setSelected(Array(5).fill(-1));
+    if (open) {
+      fetchQuestions();
+    } else {
+      // Reset state when modal closes
+      setSelected([]);
       setSubmitted(false);
       setScore(null);
       setSuggestion("");
     }
-  }, [open]);
+  }, [open, summary]);
+
+  const fetchQuestions = async () => {
+    if (!summary) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const result = await aiService.generateQuizQuestions(summary);
+      
+      if (result.error) {
+        console.error("Error generating quiz:", result.error);
+        setError(result.error);
+        toast.error("Failed to generate quiz questions");
+        return;
+      }
+      
+      if (result.questions.length === 0) {
+        setError("No questions were generated. Please try again.");
+        toast.error("Failed to generate quiz questions");
+        return;
+      }
+      
+      setQuestions(result.questions);
+      setSelected(Array(result.questions.length).fill(-1));
+    } catch (error) {
+      console.error("Error generating quiz:", error);
+      setError("An unexpected error occurred. Please try again.");
+      toast.error("Failed to generate quiz questions");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   function handleChange(idx: number, value: string) {
     const arr = [...selected];
@@ -95,24 +82,40 @@ export function QuizModal({ open, onClose, summary, onSubmit }: QuizModalProps) 
     setSelected(arr);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    
+    // Check if all questions are answered
+    if (selected.some(val => val === -1)) {
+      toast.error("Please answer all questions");
+      return;
+    }
+    
     let correct = 0;
     questions.forEach((q, i) => {
       if (selected[i] === q.answer) correct++;
     });
+    
     const resultScore = Math.round((correct / questions.length) * 100);
     setScore(resultScore);
-    let suggestionText = "";
-    if (resultScore < 80) {
-      suggestionText = "Review the article and try again for a better score!";
-    } else {
-      suggestionText = "Great job! You understood the article well.";
+    
+    // Generate personalized feedback
+    setGeneratingFeedback(true);
+    try {
+      const feedback = await aiService.generateQuizFeedback(summary, questions, selected);
+      setSuggestion(feedback);
+    } catch (error) {
+      console.error("Error generating feedback:", error);
+      setSuggestion(resultScore >= 80 
+        ? "Great job! You have a good understanding of the article." 
+        : "You might want to review the article again to improve your understanding.");
+    } finally {
+      setGeneratingFeedback(false);
     }
-    setSuggestion(suggestionText);
+    
     setSubmitted(true);
     toast.success(`Quiz completed! You scored ${resultScore}/100`);
-    onSubmit(resultScore, suggestionText);
+    onSubmit(resultScore, suggestion);
   }
 
   return (
@@ -122,7 +125,29 @@ export function QuizModal({ open, onClose, summary, onSubmit }: QuizModalProps) 
           <DialogTitle>Article Quiz</DialogTitle>
           <div className="text-sm text-muted-foreground">Answer all questions to test your understanding.</div>
         </DialogHeader>
-        {!submitted ? (
+        
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-10 space-y-4">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <p>Generating quiz questions based on the article...</p>
+          </div>
+        )}
+        
+        {error && (
+          <div className="p-4 my-4 text-center bg-destructive/10 rounded-md">
+            <p className="text-destructive font-medium">Error generating quiz questions</p>
+            <p className="text-sm mt-1">{error}</p>
+            <Button 
+              onClick={fetchQuestions} 
+              variant="outline" 
+              className="mt-3"
+            >
+              Try Again
+            </Button>
+          </div>
+        )}
+        
+        {!loading && !error && !submitted && questions.length > 0 && (
           <form className="space-y-6 mt-2" onSubmit={handleSubmit}>
             {questions.map((q, idx) => (
               <div key={idx} className="p-3 bg-muted/30 rounded">
@@ -144,10 +169,19 @@ export function QuizModal({ open, onClose, summary, onSubmit }: QuizModalProps) 
             ))}
             <Button type="submit" className="w-full">Submit Quiz</Button>
           </form>
-        ) : (
+        )}
+        
+        {submitted && (
           <div className="text-center py-8">
             <div className="text-2xl font-bold mb-2">Your Score: {score}/100</div>
-            <div className="text-sm text-muted-foreground">{suggestion}</div>
+            {generatingFeedback ? (
+              <div className="flex flex-col items-center justify-center mt-4 mb-4">
+                <Loader2 className="w-6 h-6 animate-spin text-primary mb-2" />
+                <p className="text-sm text-muted-foreground">Generating personalized feedback...</p>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">{suggestion}</div>
+            )}
             <Button className="mt-4" onClick={onClose}>Close</Button>
           </div>
         )}

@@ -32,6 +32,17 @@ interface ReferencesResponse {
   error?: string;
 }
 
+interface QuizQuestion {
+  question: string;
+  options: string[];
+  answer: number;
+}
+
+interface QuizResponse {
+  questions: QuizQuestion[];
+  error?: string;
+}
+
 export class AIService {
   private apiKey: string | null = null;
   private baseUrl = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -543,6 +554,218 @@ export class AIService {
         error: 'Failed to get references. Please check your API key and try again.',
         references: [] 
       };
+    }
+  }
+
+  async generateQuizQuestions(text: string): Promise<QuizResponse> {
+    const apiKey = this.getApiKey();
+    
+    if (!apiKey) {
+      return { error: 'API key not set', questions: [] };
+    }
+
+    try {
+      console.log('Making API call to Google Gemini API for quiz generation...');
+      
+      const prompt = `
+        Generate a 5-question multiple-choice quiz based on the following article summary.
+        For each question:
+        1. Create one clear question related to the content
+        2. Provide exactly 4 possible answers with one correct answer
+        3. Indicate which answer is correct (0 for first option, 1 for second, etc.)
+        
+        Summary:
+        ${text}
+        
+        Format your response as a JSON array of objects with this exact structure:
+        [
+          {
+            "question": "Question text here?",
+            "options": ["Option A", "Option B", "Option C", "Option D"],
+            "answer": 0
+          },
+          ... and so on for all 5 questions
+        ]
+        
+        Return ONLY the JSON array with no additional text.
+      `;
+      
+      const response = await fetch(
+        `${this.baseUrl}/${this.model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: prompt
+                  }
+                ]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.2,
+              topK: 40,
+              topP: 0.95,
+              maxOutputTokens: 1024,
+            }
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Gemini API error:', errorData);
+        return { 
+          error: `Error from Gemini API: ${errorData.error?.message || response.statusText}`,
+          questions: [] 
+        };
+      }
+
+      const data = await response.json();
+      
+      if (!data.candidates || !data.candidates[0]?.content?.parts?.[0]?.text) {
+        console.error('Unexpected response format:', data);
+        return { 
+          error: 'Received unexpected response format from Gemini API',
+          questions: [] 
+        };
+      }
+      
+      const responseText = data.candidates[0].content.parts[0].text.trim();
+      
+      // Parse the JSON response
+      try {
+        // Find JSON array in the response
+        const jsonMatch = responseText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+        const jsonString = jsonMatch ? jsonMatch[0] : responseText;
+        
+        const questions = JSON.parse(jsonString);
+        
+        if (!Array.isArray(questions) || questions.length === 0) {
+          return { 
+            error: 'Failed to parse quiz questions from AI response',
+            questions: [] 
+          };
+        }
+        
+        // Validate the format of each question
+        const validQuestions = questions
+          .filter(q => q.question && Array.isArray(q.options) && q.options.length === 4 && typeof q.answer === 'number')
+          .slice(0, 5); // Ensure we have at most 5 questions
+        
+        return { questions: validQuestions };
+      } catch (parseError) {
+        console.error('Error parsing quiz questions:', parseError);
+        return { 
+          error: 'Failed to parse quiz questions from AI response',
+          questions: [] 
+        };
+      }
+    } catch (error) {
+      console.error('Error generating quiz:', error);
+      return { 
+        error: 'Failed to generate quiz. Please check your API key and try again.',
+        questions: [] 
+      };
+    }
+  }
+
+  async generateQuizFeedback(summary: string, questions: QuizQuestion[], answers: number[]): Promise<string> {
+    const apiKey = this.getApiKey();
+    
+    if (!apiKey) {
+      return "Couldn't generate feedback: API key not set";
+    }
+
+    try {
+      console.log('Making API call to Google Gemini API for quiz feedback...');
+      
+      // Create a string representing the user's answers and correct answers
+      let resultsText = "Questions and Answers:\n\n";
+      let correctCount = 0;
+      
+      questions.forEach((q, index) => {
+        const userAnswer = answers[index];
+        const isCorrect = userAnswer === q.answer;
+        if (isCorrect) correctCount++;
+        
+        resultsText += `Question ${index + 1}: ${q.question}\n`;
+        resultsText += `User selected: "${q.options[userAnswer]}"\n`;
+        resultsText += `Correct answer: "${q.options[q.answer]}"\n`;
+        resultsText += `Result: ${isCorrect ? "Correct" : "Incorrect"}\n\n`;
+      });
+      
+      const score = Math.round((correctCount / questions.length) * 100);
+      
+      const prompt = `
+        Based on the following article summary and quiz results, provide personalized feedback.
+        
+        Summary of the article:
+        ${summary}
+        
+        ${resultsText}
+        
+        Overall score: ${score}/100
+        
+        Provide tailored feedback (3-4 sentences) based on their performance. If they got questions wrong,
+        briefly mention which concepts they should review. If they got everything right, provide encouraging feedback.
+      `;
+      
+      const response = await fetch(
+        `${this.baseUrl}/${this.model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: prompt
+                  }
+                ]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.3,
+              topK: 40,
+              topP: 0.95,
+              maxOutputTokens: 512,
+            }
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Gemini API error:', errorData);
+        return score >= 80 
+          ? "Great job! You have a good understanding of the article."
+          : "You might want to review the article again to improve your understanding.";
+      }
+
+      const data = await response.json();
+      
+      if (!data.candidates || !data.candidates[0]?.content?.parts?.[0]?.text) {
+        console.error('Unexpected response format:', data);
+        return score >= 80 
+          ? "Great job! You have a good understanding of the article."
+          : "You might want to review the article again to improve your understanding.";
+      }
+      
+      return data.candidates[0].content.parts[0].text.trim();
+    } catch (error) {
+      console.error('Error generating feedback:', error);
+      return score >= 80 
+        ? "Great job! You have a good understanding of the article."
+        : "You might want to review the article again to improve your understanding.";
     }
   }
 }

@@ -1,4 +1,3 @@
-
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -88,7 +87,6 @@ export const SummaryResult = ({
     }
   };
 
-  // Updated handleSpeak with Stop support
   const handleSpeak = (text: string) => {
     if (!window.speechSynthesis) {
       toast.error("Text-to-speech not supported.");
@@ -108,7 +106,6 @@ export const SummaryResult = ({
     window.speechSynthesis.speak(utter);
   };
 
-  // Stop button handler
   const handleStopSpeak = () => {
     if (isSpeaking && window.speechSynthesis) {
       window.speechSynthesis.cancel();
@@ -143,15 +140,19 @@ export const SummaryResult = ({
     try {
       const prompt = `Find 3 YouTube video recommendations and 2 web resources related to the following article summary. For each, return a JSON object with title, url, and type ("youtube" or "web").\n\nSummary: ${summary}`;
       const result = await aiService.geminiReferences(prompt);
-      if (!result || !Array.isArray(result.references)) {
-        toast.error("Failed to fetch references.");
+      if (!result || !Array.isArray(result.references) || result.references.length === 0) {
+        toast.error("Failed to fetch recommendations.");
+        console.error("Invalid or empty references returned:", result);
       } else {
         setRecommendations(result.references);
+        toast.success(`Found ${result.references.length} related resources`);
       }
-    } catch {
+    } catch (error) {
+      console.error("Error fetching recommendations:", error);
       toast.error("Could not fetch recommendations.");
+    } finally {
+      setLoadingRecommendations(false);
     }
-    setLoadingRecommendations(false);
   };
 
   const getScoreColor = (score: number | null) => {
