@@ -158,8 +158,25 @@ export function QuizModal({ open, onClose, summary, onSubmit }: QuizModalProps) 
                   // User's selected radio value and disabled
                   const selectedThis = selected[idx] === i;
                   const correctThis = q.answer === i;
+
+                  // Determine coloring for the submitted state
+                  let optionClass = "";
+                  if (selectedThis && isCorrect) {
+                    // User selected this and it's correct
+                    optionClass = "bg-green-100 border-green-600 text-green-800 font-bold";
+                  } else if (selectedThis && !isCorrect) {
+                    // User selected this and it's wrong
+                    optionClass = "bg-red-100 border-red-600 text-red-700 font-bold";
+                  } else if (correctThis && !selectedThis) {
+                    // Not selected but correct answer
+                    optionClass = "bg-green-50 text-green-700 font-semibold underline";
+                  } else {
+                    // Default state
+                    optionClass = "text-gray-700";
+                  }
+
                   return (
-                    <div key={i} className="flex items-center gap-2 ml-2">
+                    <div key={i} className={`flex items-center gap-2 ml-2 rounded px-2 py-1 border ${optionClass}`}>
                       <div
                         className={
                           "w-3 h-3 rounded-full mr-2 border " +
@@ -167,20 +184,13 @@ export function QuizModal({ open, onClose, summary, onSubmit }: QuizModalProps) 
                             ? isCorrect
                               ? "border-green-700 bg-green-600"
                               : "border-red-700 bg-red-600"
-                            : "border-gray-300 bg-white"
+                            : correctThis
+                              ? "border-green-700 bg-green-100"
+                              : "border-gray-300 bg-white"
                           )
                         }
                       />
-                      <span className={
-                        `${selectedThis
-                          ? (isCorrect
-                              ? "font-semibold text-green-800"
-                              : "font-semibold text-red-700")
-                          : correctThis
-                            ? "font-semibold text-green-700 underline"
-                            : ""
-                        }`
-                      }>
+                      <span>
                         {opt}
                         {correctThis && !selectedThis && (
                           <span className="ml-2 text-green-700 text-xs"> (Correct Answer)</span>
