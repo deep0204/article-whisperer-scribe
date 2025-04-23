@@ -6,7 +6,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
 import { aiService } from "@/services/aiService";
-import { Loader2, check, x } from "lucide-react";
+import { Loader2, Check, X } from "lucide-react";
 
 interface QuizQuestion {
   question: string;
@@ -143,9 +143,9 @@ export function QuizModal({ open, onClose, summary, onSubmit }: QuizModalProps) 
                 </span>
                 <span>{q.question}</span>
                 {isCorrect ? (
-                  <check className="text-green-600 w-5 h-5" />
+                  <Check className="text-green-600 w-5 h-5" />
                 ) : (
-                  <x className="text-red-500 w-5 h-5" />
+                  <X className="text-red-500 w-5 h-5" />
                 )}
                 {isCorrect ? (
                   <span className="text-green-700 ml-2 text-xs font-semibold">Correct</span>
